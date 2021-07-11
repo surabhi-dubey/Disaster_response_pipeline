@@ -17,6 +17,7 @@ from sklearn.metrics import classification_report
 import nltk
 nltk.download(['punkt', 'wordnet'])
 import pickle as pkl
+from sklearn.multioutput import MultiOutputClassifier
 
 
 def load_data(database_filepath):
@@ -30,7 +31,7 @@ def load_data(database_filepath):
     
     # Splitting into ip-op for model
     X = df['message']
-    Y = df.iloc[:,4:]
+    Y = df.iloc[:, 4:]
     return X, Y
 
 def tokenize(text):
@@ -53,19 +54,23 @@ def build_model():
     Use Pipeline API to setup feature vectors and classifier
     """
     pipeline = Pipeline([
-        ('features', FeatureUnion([
-
-            ('text_pipeline', Pipeline([
-                ('vect', CountVectorizer(tokenizer=tokenize)),
-                ('tfidf', TfidfTransformer())
-            ])),
-
-        ])),
-
-        ('clf', RandomForestClassifier())
+        ('vect', CountVectorizer(tokenizer=tokenize)),
+        ('tfidf', TfidfTransformer()),
+        ('clf', MultiOutputClassifier(RandomForestClassifier()))
     ])
-
-    return pipeline
+    
+    parameters = {
+        'vect__ngram_range': ((1, 1), (1, 2)),
+        'vect__max_df': (0.5, 0.75),
+        'vect__max_features': (None, 5000),
+        'tfidf__use_idf': (True, False),
+        'clf__estimator__n_estimators': [50],
+        'clf__estimator__min_samples_split': [2]
+    }
+    
+    cv = GridSearchCV(pipeline, param_grid=parameters)
+    
+    return cv
 
 def evaluate_model(model, X_test, Y_test):
     """
@@ -123,6 +128,7 @@ def main():
         model = build_model()
         
         print('Training model...')
+        
         model.fit(X_train, Y_train)
         
         print('Evaluating model...')
